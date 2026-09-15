@@ -16,6 +16,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -46,11 +47,16 @@ import java.net.URL
  */
 @Composable
 fun SetupScreen(initial: String, canCancel: Boolean, onCancel: () -> Unit, onSaved: (String) -> Unit) {
-    var raw by remember { mutableStateOf(initial) }
+    // Trois champs séparés : sur un clavier de tablette, taper « : » au milieu
+    // d'une IP est pénible. On les recompose en URL au moment de tester.
+    val parts = remember(initial) { Prefs.split(initial) }
+    var https by remember { mutableStateOf(parts.https) }
+    var host by remember { mutableStateOf(parts.host) }
+    var port by remember { mutableStateOf(parts.port) }
     var testing by remember { mutableStateOf(false) }
     var result by remember { mutableStateOf<Pair<Boolean, String>?>(null) }
     val scope = rememberCoroutineScope()
-    val url = Prefs.normalize(raw)
+    val url = Prefs.join(https, host, port)
 
     fun test(thenSave: Boolean) {
         if (url.isEmpty()) return
@@ -72,18 +78,37 @@ fun SetupScreen(initial: String, canCancel: Boolean, onCancel: () -> Unit, onSav
             Text("🐋", fontSize = 56.sp)
             Spacer(Modifier.height(8.dp))
             Text("Docker Dashboard", style = MaterialTheme.typography.headlineSmall, color = Color.White)
-            Text("Adresse de ton dashboard, comme dans le navigateur.", style = MaterialTheme.typography.bodyMedium, color = Color(0xFF9AA0AE))
+            Text("L'adresse de ton NAS et le port du dashboard.", style = MaterialTheme.typography.bodyMedium, color = Color(0xFF9AA0AE))
             Spacer(Modifier.height(24.dp))
-            OutlinedTextField(
-                value = raw,
-                onValueChange = { raw = it; result = null },
-                modifier = Modifier.fillMaxWidth(),
-                singleLine = true,
-                label = { Text("Adresse") },
-                placeholder = { Text("192.168.1.30:3000") },
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri, imeAction = ImeAction.Go),
-                keyboardActions = KeyboardActions(onGo = { test(thenSave = true) }),
-            )
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
+                OutlinedTextField(
+                    value = host,
+                    onValueChange = { host = it.trim(); result = null },
+                    modifier = Modifier.weight(1f),
+                    singleLine = true,
+                    label = { Text("Adresse du NAS") },
+                    placeholder = { Text("192.168.1.30") },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri, imeAction = ImeAction.Next),
+                )
+                OutlinedTextField(
+                    value = port,
+                    onValueChange = { v -> port = v.filter { it.isDigit() }.take(5); result = null },
+                    modifier = Modifier.widthIn(min = 96.dp, max = 120.dp),
+                    singleLine = true,
+                    label = { Text("Port") },
+                    placeholder = { Text("3000") },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Go),
+                    keyboardActions = KeyboardActions(onGo = { test(thenSave = true) }),
+                )
+            }
+            Spacer(Modifier.height(6.dp))
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Switch(checked = https, onCheckedChange = { https = it; result = null })
+                Text("HTTPS (reverse proxy / certificat)", style = MaterialTheme.typography.bodySmall, color = Color(0xFF9AA0AE))
+            }
+            if (url.isNotEmpty()) {
+                Text(url, style = MaterialTheme.typography.bodySmall, color = Color(0xFF6B7280))
+            }
             if (url.isNotEmpty() && Prefs.isPlainHttpOutsideLan(url)) {
                 Spacer(Modifier.height(8.dp))
                 Text("⚠ http:// hors du réseau local : le mot de passe circulerait en clair. Passe par un VPN (Tailscale) ou par https.", color = Color(0xFFF5B942), style = MaterialTheme.typography.bodySmall)
