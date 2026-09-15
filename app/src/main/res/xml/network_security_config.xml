@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Le trafic en clair est autorisé, et c'est un choix : le dashboard vit sur un
+  NAS joint en LAN ou par VPN, le plus souvent en http:// sur une IP. Les
+  entrées <domain> d'Android ne savent pas décrire une plage d'adresses, donc
+  impossible de restreindre proprement. L'écran d'adresse prévient quand une
+  URL http:// n'est pas locale.
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true">
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </base-config>
+</network-security-config>

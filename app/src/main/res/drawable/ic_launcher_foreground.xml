@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Baleine stylisée, centrée dans la zone sûre de l'icône adaptative (108dp, zone 66dp). -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp" android:height="108dp"
+    android:viewportWidth="108" android:viewportHeight="108">
+    <!-- corps -->
+    <path android:fillColor="#FFFFFF"
+        android:pathData="M30,58 C30,44 42,36 56,36 C70,36 80,44 80,54 C80,62 74,68 66,68 L40,68 C34,68 30,64 30,58 Z" />
+    <!-- queue -->
+    <path android:fillColor="#FFFFFF"
+        android:pathData="M78,52 L88,42 L90,50 L96,48 L88,60 Z" />
+    <!-- jet d'eau -->
+    <path android:fillColor="#9DB4FF"
+        android:pathData="M50,34 C48,28 52,24 50,20 C56,24 54,30 52,34 Z" />
+    <!-- oeil -->
+    <path android:fillColor="#1B2A6B" android:pathData="M42,52 m-2.5,0 a2.5,2.5 0 1,0 5,0 a2.5,2.5 0 1,0 -5,0" />
+    <!-- conteneurs sur le dos -->
+    <path android:fillColor="#4A6CF7" android:pathData="M48,38 h8 v8 h-8 z M58,38 h8 v8 h-8 z M53,30 h8 v8 h-8 z" />
+</vector>

@@ -1,0 +1,39 @@
+# --- Sorties de build ---
+build/
+.gradle/
+.kotlin/
+*.apk
+*.aab
+
+# --- Spécifique à la machine ---
+# Contient le chemin du SDK Android local.
+local.properties
+
+# --- IDE ---
+.idea/
+*.iml
+captures/
+.externalNativeBuild/
+.cxx/
+
+# --- Sondages ---
+# Les SCRIPTS sont versionnés : ils sont utiles et ne contiennent aucun secret,
+# le jeton y est saisi au clavier et jamais écrit.
+# Les RÉPONSES, en revanche, cartographient une installation réelle : noms
+# d'environnements, adresses, conteneurs, volumes, ports publiés.
+probe/local/
+probe/nas/
+probe/nas2/
+probe/*/
+
+# --- Signature ---
+# Aucun keystore ni mot de passe ne doit entrer ici. Les identifiants de
+# signature vivent dans ~/.gradle/gradle.properties, hors du dépôt.
+*.jks
+*.keystore
+keystore.properties
+signing.properties
+
+# --- Système ---
+.DS_Store
+Thumbs.db
