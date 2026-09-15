@@ -22,10 +22,11 @@ automatiquement chaque mise à jour du conteneur sans réinstallation.
 
 ## Télécharger l'APK
 
-GitHub Actions construit l'application : chaque push sur `main` dépose un APK debug
-dans l'onglet **Actions** (Artifacts), et chaque tag `v*` publie une **Release** avec
-l'APK attaché (signé si les secrets `KEYSTORE_BASE64`, `KEYSTORE_PASSWORD`,
-`KEY_ALIAS`, `KEY_PASSWORD` sont définis dans le dépôt, sinon APK debug).
+Les versions sont dans les **Releases** GitHub, signées avec la clé de l'auteur. Elles
+sont produites sur le poste de développement par `tools\publier.ps1` (compilation propre,
+vérification de la version et de la signature lues dans l'APK, tag, Release) : **aucun
+secret n'est stocké sur GitHub**, le CI ne fait qu'un contrôle de compilation et dépose
+un APK debug en artefact dans l'onglet Actions.
 
 ## Compiler
 
