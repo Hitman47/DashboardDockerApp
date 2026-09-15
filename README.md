@@ -20,6 +20,13 @@ automatiquement chaque mise à jour du conteneur sans réinstallation.
 - HTTP en clair autorisé (LAN / VPN) ; l'écran d'adresse prévient si l'URL http://
   n'est pas locale.
 
+## Télécharger l'APK
+
+GitHub Actions construit l'application : chaque push sur `main` dépose un APK debug
+dans l'onglet **Actions** (Artifacts), et chaque tag `v*` publie une **Release** avec
+l'APK attaché (signé si les secrets `KEYSTORE_BASE64`, `KEYSTORE_PASSWORD`,
+`KEY_ALIAS`, `KEY_PASSWORD` sont définis dans le dépôt, sinon APK debug).
+
 ## Compiler
 
 Windows, Android Studio SDK installé (`local.properties` → `sdk.dir`), Java 17+ :
