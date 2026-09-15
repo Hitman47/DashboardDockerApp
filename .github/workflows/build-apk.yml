@@ -24,7 +24,8 @@ jobs:
           distribution: temurin
           java-version: "21"
 
-      - uses: android-actions/setup-android@v3
+      # Le runner ubuntu-latest embarque déjà le SDK Android (ANDROID_HOME) ;
+      # l'AGP télécharge lui-même la plateforme 36 et les build-tools manquants.
 
       - uses: gradle/actions/setup-gradle@v4
 
