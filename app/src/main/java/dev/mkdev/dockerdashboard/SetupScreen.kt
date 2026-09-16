@@ -28,6 +28,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
@@ -46,7 +47,7 @@ import java.net.URL
  * qui écoute sur ce port.
  */
 @Composable
-fun SetupScreen(initial: String, canCancel: Boolean, onCancel: () -> Unit, onSaved: (String) -> Unit) {
+fun SetupScreen(initial: String, canCancel: Boolean, onCancel: () -> Unit, onSaved: (String) -> Unit, lockEnabled: Boolean = false, onLockChanged: (Boolean) -> Unit = {}) {
     // Trois champs séparés : sur un clavier de tablette, taper « : » au milieu
     // d'une IP est pénible. On les recompose en URL au moment de tester.
     val parts = remember(initial) { Prefs.split(initial) }
@@ -57,6 +58,8 @@ fun SetupScreen(initial: String, canCancel: Boolean, onCancel: () -> Unit, onSav
     var result by remember { mutableStateOf<Pair<Boolean, String>?>(null) }
     val scope = rememberCoroutineScope()
     val url = Prefs.join(https, host, port)
+    val context = LocalContext.current
+    val lockUnavailable = remember { Lock.unavailableReason(context) }
 
     fun test(thenSave: Boolean) {
         if (url.isEmpty()) return
@@ -108,6 +111,14 @@ fun SetupScreen(initial: String, canCancel: Boolean, onCancel: () -> Unit, onSav
             }
             if (url.isNotEmpty()) {
                 Text(url, style = MaterialTheme.typography.bodySmall, color = Color(0xFF6B7280))
+            }
+            Spacer(Modifier.height(6.dp))
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Switch(checked = lockEnabled && lockUnavailable == null, onCheckedChange = onLockChanged, enabled = lockUnavailable == null)
+                Text(
+                    if (lockUnavailable == null) "🔒 Empreinte / visage / code à l'ouverture" else "🔒 Verrou : $lockUnavailable",
+                    style = MaterialTheme.typography.bodySmall, color = Color(0xFF9AA0AE),
+                )
             }
             if (url.isNotEmpty() && Prefs.isPlainHttpOutsideLan(url)) {
                 Spacer(Modifier.height(8.dp))

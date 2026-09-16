@@ -19,6 +19,9 @@ automatiquement chaque mise à jour du conteneur sans réinstallation.
   config, ICS) vers *Téléchargements*.
 - HTTP en clair autorisé (LAN / VPN) ; l'écran d'adresse prévient si l'URL http://
   n'est pas locale.
+- **Verrou à l'ouverture** (option) : empreinte, visage ou code de l'appareil au lancement
+  et après plus de 30 s passées ailleurs ; un aller-retour rapide vers Chrome (lien ↗) ne
+  redemande rien. Se règle dans l'écran d'adresse (Retour → Changer d'adresse).
 
 ## Télécharger l'APK
 

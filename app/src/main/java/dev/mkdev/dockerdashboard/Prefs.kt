@@ -3,6 +3,7 @@ package dev.mkdev.dockerdashboard
 import android.content.Context
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
+import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
@@ -10,14 +11,15 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 
 /**
- * Le seul réglage de l'application : l'adresse du dashboard. Tout le reste
- * (mot de passe, thème, taille du texte…) vit dans le dashboard lui-même et
- * dans le stockage web de la WebView.
+ * Les réglages de l'application : l'adresse du dashboard et le verrou
+ * biométrique. Tout le reste (mot de passe, thème, taille du texte…) vit dans
+ * le dashboard lui-même et dans le stockage web de la WebView.
  */
 private val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "settings")
 
 object Prefs {
     private val SERVER_URL = stringPreferencesKey("server_url")
+    private val BIOMETRIC_LOCK = booleanPreferencesKey("biometric_lock")
 
     fun serverUrl(context: Context): Flow<String?> = context.dataStore.data.map { it[SERVER_URL] }
 
@@ -25,6 +27,13 @@ object Prefs {
         context.dataStore.edit { prefs ->
             if (url.isNullOrBlank()) prefs.remove(SERVER_URL) else prefs[SERVER_URL] = url
         }
+    }
+
+    /** Empreinte / visage / code de l'appareil demandé à l'ouverture (défaut : non). */
+    fun biometricLock(context: Context): Flow<Boolean> = context.dataStore.data.map { it[BIOMETRIC_LOCK] ?: false }
+
+    suspend fun setBiometricLock(context: Context, enabled: Boolean) {
+        context.dataStore.edit { it[BIOMETRIC_LOCK] = enabled }
     }
 
     /**
