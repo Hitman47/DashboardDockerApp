@@ -224,6 +224,10 @@ private fun createWebView(
         WebView.setWebContentsDebuggingEnabled(true)
     }
     val webView = WebView(ctx)
+    // Sans ceci la WebView est mesurée en WRAP_CONTENT : Chromium prend alors une
+    // hauteur de viewport de 0 et les unités `vh` valent 0 px → les fenêtres du
+    // dashboard (max-height: 90vh) s'affichaient écrasées sur une ligne.
+    webView.layoutParams = android.view.ViewGroup.LayoutParams(android.view.ViewGroup.LayoutParams.MATCH_PARENT, android.view.ViewGroup.LayoutParams.MATCH_PARENT)
     webView.setBackgroundColor(0xFF0A0B0E.toInt())
     webView.settings.apply {
         javaScriptEnabled = true
