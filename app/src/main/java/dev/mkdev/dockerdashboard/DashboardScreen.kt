@@ -35,6 +35,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Button
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
@@ -54,11 +55,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.withContext
 import java.io.File
 
 /**
@@ -81,6 +85,23 @@ fun DashboardScreen(serverUrl: String, onChangeServer: () -> Unit, onExit: () ->
         var progress by remember { mutableIntStateOf(0) }
         var showMenu by remember { mutableStateOf(false) }
         var pendingFiles by remember { mutableStateOf<ValueCallback<Array<Uri>>?>(null) }
+        // Nouvelle version de l'app signalée par le dashboard (voir Updates.kt).
+        var update by remember { mutableStateOf<Updates.Release?>(null) }
+        var updateDismissed by remember { mutableStateOf(false) }
+        var updateTick by remember { mutableIntStateOf(0) }
+        val context = LocalContext.current
+        // Relancé à chaque page chargée. La connexion se fait dans la page sans
+        // rechargement : tant qu'on n'est pas connecté, on retente toutes les 20 s.
+        LaunchedEffect(updateTick) {
+            if (updateTick == 0 || update != null || updateDismissed) return@LaunchedEffect
+            while (true) {
+                when (val r = withContext(Dispatchers.IO) { Updates.check(serverUrl) }) {
+                    is Updates.Result.Available -> { update = r.release; return@LaunchedEffect }
+                    Updates.Result.Nothing -> return@LaunchedEffect
+                    Updates.Result.NotSignedIn -> delay(20_000)
+                }
+            }
+        }
         val filePicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
             pendingFiles?.onReceiveValue(if (uri != null) arrayOf(uri) else null)
             pendingFiles = null
@@ -115,7 +136,7 @@ fun DashboardScreen(serverUrl: String, onChangeServer: () -> Unit, onExit: () ->
                         ctx, serverUrl,
                         onProgress = { progress = it },
                         onError = { error = it },
-                        onLoaded = { error = null },
+                        onLoaded = { error = null; updateTick++ },
                         onFileChooser = { cb, accept -> pendingFiles?.onReceiveValue(null); pendingFiles = cb; filePicker.launch(accept) },
                     ).also { webView = it; it.loadUrl(serverUrl) }
                 },
@@ -124,6 +145,11 @@ fun DashboardScreen(serverUrl: String, onChangeServer: () -> Unit, onExit: () ->
                 LinearProgressIndicator(progress = { progress / 100f }, modifier = Modifier.fillMaxWidth().align(Alignment.TopCenter), color = DashAccent, trackColor = Color.Transparent, gapSize = 0.dp, drawStopIndicator = {})
             }
             error?.let { msg -> ErrorOverlay(msg, onRetry = { webView?.reload() }, onChangeServer = onChangeServer) }
+            update?.takeIf { !updateDismissed }?.let { rel ->
+                UpdateBanner(rel, modifier = Modifier.align(Alignment.BottomCenter),
+                    onInstall = { Updates.download(context, rel) }, // le bandeau reste : on peut relancer si le téléchargement échoue
+                    onDismiss = { updateDismissed = true })
+            }
         }
 
         if (showMenu) {
@@ -140,6 +166,20 @@ fun DashboardScreen(serverUrl: String, onChangeServer: () -> Unit, onExit: () ->
                 },
                 dismissButton = { TextButton(onClick = { showMenu = false }) { Text("Annuler") } },
             )
+        }
+    }
+}
+
+@Composable
+private fun UpdateBanner(release: Updates.Release, modifier: Modifier, onInstall: () -> Unit, onDismiss: () -> Unit) {
+    Surface(modifier = modifier.fillMaxWidth().padding(12.dp), color = Color(0xFF1B2A6B), shape = MaterialTheme.shapes.medium, tonalElevation = 4.dp) {
+        Row(Modifier.padding(start = 14.dp, end = 4.dp, top = 4.dp, bottom = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text("Docker Dashboard ${release.version} disponible", style = MaterialTheme.typography.bodyMedium, color = Color.White)
+                Text("Tu as la ${BuildConfig.VERSION_NAME} · ${release.sizeBytes / 1_000_000} Mo", style = MaterialTheme.typography.bodySmall, color = Color(0xFFB8C1E8))
+            }
+            TextButton(onClick = onInstall) { Text("Installer", color = Color.White) }
+            TextButton(onClick = onDismiss) { Text("✕", color = Color(0xFFB8C1E8)) }
         }
     }
 }
