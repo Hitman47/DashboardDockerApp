@@ -8,26 +8,81 @@ import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
+import org.json.JSONArray
+import org.json.JSONObject
 
 /**
- * Les réglages de l'application : l'adresse du dashboard et le verrou
- * biométrique. Tout le reste (mot de passe, thème, taille du texte…) vit dans
- * le dashboard lui-même et dans le stockage web de la WebView.
+ * Les réglages de l'application : les dashboards mémorisés (profils : un
+ * par NAS), celui qui est ouvert, et le verrou biométrique. Tout le reste
+ * (mot de passe, thème, taille du texte…) vit dans le dashboard lui-même et
+ * dans le stockage web de la WebView — qui sépare déjà les sessions par
+ * origine, donc chaque NAS garde la sienne.
  */
 private val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "settings")
 
 object Prefs {
-    private val SERVER_URL = stringPreferencesKey("server_url")
+    private val SERVER_URL = stringPreferencesKey("server_url") // < 0.1.7 : une seule adresse
+    private val PROFILES = stringPreferencesKey("profiles")      // JSON [{id,name,url}]
+    private val ACTIVE = stringPreferencesKey("active_profile")
     private val BIOMETRIC_LOCK = booleanPreferencesKey("biometric_lock")
 
-    fun serverUrl(context: Context): Flow<String?> = context.dataStore.data.map { it[SERVER_URL] }
+    data class Profile(val id: String, val name: String, val url: String) {
+        /** Nom affiché : le nom donné, sinon l'hôte de l'URL. */
+        val label: String get() = name.ifBlank { split(url).host.ifBlank { url } }
+    }
 
-    suspend fun setServerUrl(context: Context, url: String?) {
+    private fun parse(json: String?): List<Profile> = try {
+        val arr = JSONArray(json ?: "[]")
+        (0 until arr.length()).map { i -> val o = arr.getJSONObject(i); Profile(o.getString("id"), o.optString("name"), o.getString("url")) }
+            .filter { it.url.isNotBlank() }
+    } catch (_: Exception) { emptyList() }
+
+    private fun serialize(list: List<Profile>): String =
+        JSONArray().apply { list.forEach { put(JSONObject().put("id", it.id).put("name", it.name).put("url", it.url)) } }.toString()
+
+    fun newId(): String = System.currentTimeMillis().toString(36) + (0..999).random().toString(36)
+
+    /** Tous les profils ; l'ancienne adresse unique (< 0.1.7) devient le premier profil, une fois. */
+    fun profiles(context: Context): Flow<List<Profile>> = context.dataStore.data.map { prefs ->
+        val list = parse(prefs[PROFILES])
+        val legacy = prefs[SERVER_URL]
+        if (list.isEmpty() && !legacy.isNullOrBlank()) listOf(Profile("legacy", "", legacy)) else list
+    }
+
+    fun activeId(context: Context): Flow<String?> = context.dataStore.data.map { it[ACTIVE] }
+
+    /** Ajoute ou remplace (même id) ; devient le profil ouvert. */
+    suspend fun saveProfile(context: Context, profile: Profile) {
         context.dataStore.edit { prefs ->
-            if (url.isNullOrBlank()) prefs.remove(SERVER_URL) else prefs[SERVER_URL] = url
+            val list = migrated(prefs).filter { it.id != profile.id } + profile
+            prefs[PROFILES] = serialize(list)
+            prefs[ACTIVE] = profile.id
+            prefs.remove(SERVER_URL)
         }
     }
+
+    suspend fun deleteProfile(context: Context, id: String) {
+        context.dataStore.edit { prefs ->
+            val list = migrated(prefs).filter { it.id != id }
+            prefs[PROFILES] = serialize(list)
+            prefs.remove(SERVER_URL)
+            if (prefs[ACTIVE] == id) { val next = list.firstOrNull(); if (next != null) prefs[ACTIVE] = next.id else prefs.remove(ACTIVE) }
+        }
+    }
+
+    suspend fun setActive(context: Context, id: String) {
+        context.dataStore.edit { it[ACTIVE] = id }
+    }
+
+    private fun migrated(prefs: Preferences): List<Profile> {
+        val list = parse(prefs[PROFILES])
+        val legacy = prefs[SERVER_URL]
+        return if (list.isEmpty() && !legacy.isNullOrBlank()) listOf(Profile("legacy", "", legacy)) else list
+    }
+
+    suspend fun currentProfiles(context: Context): List<Profile> = profiles(context).first()
 
     /** Empreinte / visage / code de l'appareil demandé à l'ouverture (défaut : non). */
     fun biometricLock(context: Context): Flow<Boolean> = context.dataStore.data.map { it[BIOMETRIC_LOCK] ?: false }

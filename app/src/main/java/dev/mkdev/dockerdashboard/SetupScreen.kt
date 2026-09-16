@@ -1,5 +1,6 @@
 package dev.mkdev.dockerdashboard
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -47,19 +48,23 @@ import java.net.URL
  * qui écoute sur ce port.
  */
 @Composable
-fun SetupScreen(initial: String, canCancel: Boolean, onCancel: () -> Unit, onSaved: (String) -> Unit, lockEnabled: Boolean = false, onLockChanged: (Boolean) -> Unit = {}) {
+fun SetupScreen(profile: Prefs.Profile?, canCancel: Boolean, onCancel: () -> Unit, onSaved: (Prefs.Profile) -> Unit, lockEnabled: Boolean = false, onLockChanged: (Boolean) -> Unit = {}) {
     // Trois champs séparés : sur un clavier de tablette, taper « : » au milieu
     // d'une IP est pénible. On les recompose en URL au moment de tester.
-    val parts = remember(initial) { Prefs.split(initial) }
+    val parts = remember(profile) { Prefs.split(profile?.url ?: "") }
+    var name by remember { mutableStateOf(profile?.name ?: "") }
     var https by remember { mutableStateOf(parts.https) }
     var host by remember { mutableStateOf(parts.host) }
     var port by remember { mutableStateOf(parts.port) }
     var testing by remember { mutableStateOf(false) }
     var result by remember { mutableStateOf<Pair<Boolean, String>?>(null) }
+    var foundName by remember { mutableStateOf("") }
     val scope = rememberCoroutineScope()
     val url = Prefs.join(https, host, port)
     val context = LocalContext.current
     val lockUnavailable = remember { Lock.unavailableReason(context) }
+    // Retour = annuler la fiche (pas quitter l'app) quand il y a déjà un dashboard.
+    BackHandler(enabled = canCancel) { onCancel() }
 
     fun test(thenSave: Boolean) {
         if (url.isEmpty()) return
@@ -68,7 +73,9 @@ fun SetupScreen(initial: String, canCancel: Boolean, onCancel: () -> Unit, onSav
             val r = withContext(Dispatchers.IO) { probe(url) }
             testing = false
             result = r
-            if (thenSave && r.first) onSaved(url)
+            if (r.first) foundName = r.second.removePrefix("Trouvé : ")
+            // Sans nom saisi, le profil prend le nom que le dashboard s'est donné.
+            if (thenSave && r.first) onSaved(Prefs.Profile(profile?.id ?: Prefs.newId(), name.trim().ifBlank { foundName }, url))
         }
     }
 
@@ -80,9 +87,19 @@ fun SetupScreen(initial: String, canCancel: Boolean, onCancel: () -> Unit, onSav
         Column(Modifier.widthIn(max = 480.dp).fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
             Text("🐋", fontSize = 56.sp)
             Spacer(Modifier.height(8.dp))
-            Text("Docker Dashboard", style = MaterialTheme.typography.headlineSmall, color = Color.White)
+            Text(if (profile == null) "Nouveau dashboard" else "Modifier le dashboard", style = MaterialTheme.typography.headlineSmall, color = Color.White)
             Text("L'adresse de ton NAS et le port du dashboard.", style = MaterialTheme.typography.bodyMedium, color = Color(0xFF9AA0AE))
             Spacer(Modifier.height(24.dp))
+            OutlinedTextField(
+                value = name,
+                onValueChange = { name = it },
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true,
+                label = { Text("Nom (facultatif)") },
+                placeholder = { Text(foundName.ifBlank { "NAS maison, NAS bureau…" }) },
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
+            )
+            Spacer(Modifier.height(10.dp))
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
                 OutlinedTextField(
                     value = host,

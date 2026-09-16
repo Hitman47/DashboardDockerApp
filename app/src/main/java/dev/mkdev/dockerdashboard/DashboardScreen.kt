@@ -72,13 +72,15 @@ import java.io.File
  *  - les liens vers d'autres origines (↗ Ouvrir une WebUI, liens des blocs)
  *    sortent dans le navigateur, le dashboard reste ici ;
  *  - hors ligne / NAS éteint : un écran d'erreur qui réessaie tout seul ;
- *  - Retour = historique de la page, puis un petit menu (recharger, changer
- *    d'adresse, quitter) ;
+ *  - Retour = historique de la page, puis un petit menu (recharger, autres
+ *    dashboards, modifier, quitter) ;
  *  - envoi de fichiers (fonds d'écran, import de config) et téléchargements
  *    (export de config, ICS) pris en charge.
  */
 @Composable
-fun DashboardScreen(serverUrl: String, onChangeServer: () -> Unit, onExit: () -> Unit) {
+fun DashboardScreen(profile: Prefs.Profile, onChangeServer: () -> Unit, onSwitch: () -> Unit, onExit: () -> Unit) {
+    val serverUrl = profile.url
+    // key(url) : changer de dashboard = une autre WebView (sessions séparées par origine).
     key(serverUrl) {
         var webView by remember { mutableStateOf<WebView?>(null) }
         var error by remember { mutableStateOf<String?>(null) }
@@ -155,12 +157,13 @@ fun DashboardScreen(serverUrl: String, onChangeServer: () -> Unit, onExit: () ->
         if (showMenu) {
             AlertDialog(
                 onDismissRequest = { showMenu = false },
-                title = { Text("Docker Dashboard") },
+                title = { Text(profile.label) },
                 text = { Text(serverUrl, style = MaterialTheme.typography.bodySmall, color = Color(0xFF9AA0AE)) },
                 confirmButton = {
                     Column(horizontalAlignment = Alignment.End) {
                         TextButton(onClick = { showMenu = false; webView?.reload() }) { Text("↻ Recharger") }
-                        TextButton(onClick = { showMenu = false; onChangeServer() }) { Text("✎ Changer d'adresse") }
+                        TextButton(onClick = { showMenu = false; onSwitch() }) { Text("⇄ Mes dashboards") }
+                        TextButton(onClick = { showMenu = false; onChangeServer() }) { Text("✎ Modifier ce dashboard") }
                         TextButton(onClick = { showMenu = false; onExit() }) { Text("✕ Quitter") }
                     }
                 },

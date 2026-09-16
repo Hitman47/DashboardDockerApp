@@ -8,13 +8,17 @@ automatiquement chaque mise à jour du conteneur sans réinstallation.
 
 - Premier lancement : l'adresse du dashboard (`192.168.1.30:3000`), bouton **Tester**
   qui vérifie qu'un Docker Dashboard répond et affiche son nom.
+- **Plusieurs dashboards** (un par NAS) : chaque fiche a un nom (facultatif, sinon celui
+  que le dashboard s'est donné), l'app retient le dernier ouvert. Retour → **Mes dashboards**
+  pour passer de l'un à l'autre, ajouter, modifier ou supprimer. Chaque dashboard garde sa
+  propre session (cookies et stockage séparés par adresse).
 - Session conservée entre les lancements (stockage web + cookies), WebSocket « Live » actif.
 - Téléphone comme tablette : c'est le dashboard lui-même qui est responsive ; la taille
   du texte se règle dans ses Réglages › Général.
 - Les liens vers d'autres services (↗ WebUI, blocs) s'ouvrent dans le navigateur ;
   le dashboard reste dans l'app.
 - NAS éteint / réseau coupé : écran d'erreur avec nouvel essai automatique toutes les 5 s.
-- **Retour** : historique de la page, puis menu (recharger, changer d'adresse, quitter).
+- **Retour** : historique de la page, puis menu (recharger, mes dashboards, modifier ce dashboard, quitter).
 - Envoi de fichiers (fonds d'écran, import de config) et téléchargements (export de
   config, ICS) vers *Téléchargements*.
 - HTTP en clair autorisé (LAN / VPN) ; l'écran d'adresse prévient si l'URL http://
@@ -24,7 +28,7 @@ automatiquement chaque mise à jour du conteneur sans réinstallation.
   la notification ouvre l'installateur. Le dépôt reste privé, aucun jeton dans l'app.
 - **Verrou à l'ouverture** (option) : empreinte, visage ou code de l'appareil au lancement
   et après plus de 30 s passées ailleurs ; un aller-retour rapide vers Chrome (lien ↗) ne
-  redemande rien. Se règle dans l'écran d'adresse (Retour → Changer d'adresse).
+  redemande rien. Se règle dans la fiche d'un dashboard (Retour → Modifier ce dashboard).
 
 ## Télécharger l'APK
 
