@@ -218,6 +218,11 @@ private fun createWebView(
     onFileChooser: (ValueCallback<Array<Uri>>, String) -> Unit,
 ): WebView {
     val origin = Uri.parse(serverUrl)
+    // Inspection chrome://inspect depuis un PC en USB, seulement si le débogage USB est
+    // activé sur l'appareil (donc par son propriétaire) : diagnostic d'affichage sans build debug.
+    if (BuildConfig.DEBUG || android.provider.Settings.Global.getInt(ctx.contentResolver, android.provider.Settings.Global.ADB_ENABLED, 0) == 1) {
+        WebView.setWebContentsDebuggingEnabled(true)
+    }
     val webView = WebView(ctx)
     webView.setBackgroundColor(0xFF0A0B0E.toInt())
     webView.settings.apply {
