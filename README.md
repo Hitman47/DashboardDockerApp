@@ -8,8 +8,9 @@ automatiquement chaque mise à jour du conteneur sans réinstallation.
 
 - Premier lancement : l'adresse du dashboard (`192.168.1.30:3000`), bouton **Tester**
   qui vérifie qu'un Docker Dashboard répond et affiche son nom.
-- **Plusieurs dashboards** (un par NAS) : chaque fiche a un nom (facultatif, sinon celui
-  que le dashboard s'est donné), l'app retient le dernier ouvert. Retour → **Mes dashboards**
+- **Plusieurs dashboards** (un par NAS) : chaque fiche a un nom (facultatif) et affiche
+  le nom que le dashboard s'est donné (relu à chaque ouverture de la liste) ; l'app
+  retient le dernier ouvert. Retour → **Mes dashboards**
   pour passer de l'un à l'autre, ajouter, modifier ou supprimer. Chaque dashboard garde sa
   propre session (cookies et stockage séparés par adresse).
 - Session conservée entre les lancements (stockage web + cookies), WebSocket « Live » actif.

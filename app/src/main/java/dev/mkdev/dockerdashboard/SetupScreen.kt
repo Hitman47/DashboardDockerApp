@@ -75,7 +75,7 @@ fun SetupScreen(profile: Prefs.Profile?, canCancel: Boolean, onCancel: () -> Uni
             result = r
             if (r.first) foundName = r.second.removePrefix("Trouvé : ")
             // Sans nom saisi, le profil prend le nom que le dashboard s'est donné.
-            if (thenSave && r.first) onSaved(Prefs.Profile(profile?.id ?: Prefs.newId(), name.trim().ifBlank { foundName }, url))
+            if (thenSave && r.first) onSaved(Prefs.Profile(profile?.id ?: Prefs.newId(), name.trim(), url, serverName = foundName))
         }
     }
 
@@ -157,20 +157,27 @@ fun SetupScreen(profile: Prefs.Profile?, canCancel: Boolean, onCancel: () -> Uni
 }
 
 /** → (ok, message). Jamais d'exception : le message explique l'échec. */
-private fun probe(base: String): Pair<Boolean, String> {
-    return try {
-        val conn = (URL("$base/api/auth/status").openConnection() as HttpURLConnection).apply {
-            connectTimeout = 5000; readTimeout = 5000
-            setRequestProperty("Accept", "application/json")
-        }
-        val code = conn.responseCode
-        if (code != 200) return false to "HTTP $code : ce n'est pas un Docker Dashboard ?"
-        val body = conn.inputStream.bufferedReader().readText()
-        val json = JSONObject(body)
-        if (!json.has("required")) return false to "Réponse inattendue : ce n'est pas un Docker Dashboard"
-        val name = json.optJSONObject("branding")?.optString("name").orEmpty().ifBlank { "Docker Dashboard" }
-        true to "Trouvé : $name"
-    } catch (e: Exception) {
-        false to (e.message?.takeIf { it.isNotBlank() }?.let { "Injoignable ($it)" } ?: "Injoignable")
+/** Interroge `/api/auth/status` (public) : le nom que le dashboard s'est donné, ou l'erreur si ce n'en est pas un / injoignable. */
+fun probeDashboardName(base: String): Result<String> = runCatching {
+    val conn = (URL("$base/api/auth/status").openConnection() as HttpURLConnection).apply {
+        connectTimeout = 5000; readTimeout = 5000
+        setRequestProperty("Accept", "application/json")
     }
+    val code = conn.responseCode
+    if (code != 200) error("HTTP $code : ce n'est pas un Docker Dashboard ?")
+    val json = JSONObject(conn.inputStream.bufferedReader().readText())
+    if (!json.has("required")) error("Réponse inattendue : ce n'est pas un Docker Dashboard")
+    json.optJSONObject("branding")?.optString("name").orEmpty().ifBlank { "Docker Dashboard" }
 }
+
+private fun probe(base: String): Pair<Boolean, String> = probeDashboardName(base).fold(
+    onSuccess = { true to "Trouvé : $it" },
+    onFailure = { e ->
+        val m = e.message.orEmpty()
+        false to when {
+            m.startsWith("HTTP ") || m.startsWith("Réponse") -> m
+            m.isNotBlank() -> "Injoignable ($m)"
+            else -> "Injoignable"
+        }
+    },
+)

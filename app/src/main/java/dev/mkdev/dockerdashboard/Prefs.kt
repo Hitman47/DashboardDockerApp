@@ -28,19 +28,20 @@ object Prefs {
     private val ACTIVE = stringPreferencesKey("active_profile")
     private val BIOMETRIC_LOCK = booleanPreferencesKey("biometric_lock")
 
-    data class Profile(val id: String, val name: String, val url: String) {
-        /** Nom affiché : le nom donné, sinon l'hôte de l'URL. */
-        val label: String get() = name.ifBlank { split(url).host.ifBlank { url } }
+    /** [serverName] = le nom que le dashboard s'est donné (Réglages › Général), relu à chaque affichage de la liste. */
+    data class Profile(val id: String, val name: String, val url: String, val serverName: String = "") {
+        /** Nom affiché : le nom donné, sinon celui du serveur, sinon l'hôte de l'URL. */
+        val label: String get() = name.ifBlank { serverName.ifBlank { split(url).host.ifBlank { url } } }
     }
 
     private fun parse(json: String?): List<Profile> = try {
         val arr = JSONArray(json ?: "[]")
-        (0 until arr.length()).map { i -> val o = arr.getJSONObject(i); Profile(o.getString("id"), o.optString("name"), o.getString("url")) }
+        (0 until arr.length()).map { i -> val o = arr.getJSONObject(i); Profile(o.getString("id"), o.optString("name"), o.getString("url"), o.optString("server")) }
             .filter { it.url.isNotBlank() }
     } catch (_: Exception) { emptyList() }
 
     private fun serialize(list: List<Profile>): String =
-        JSONArray().apply { list.forEach { put(JSONObject().put("id", it.id).put("name", it.name).put("url", it.url)) } }.toString()
+        JSONArray().apply { list.forEach { put(JSONObject().put("id", it.id).put("name", it.name).put("url", it.url).put("server", it.serverName)) } }.toString()
 
     fun newId(): String = System.currentTimeMillis().toString(36) + (0..999).random().toString(36)
 
@@ -69,6 +70,16 @@ object Prefs {
             prefs[PROFILES] = serialize(list)
             prefs.remove(SERVER_URL)
             if (prefs[ACTIVE] == id) { val next = list.firstOrNull(); if (next != null) prefs[ACTIVE] = next.id else prefs.remove(ACTIVE) }
+        }
+    }
+
+    /** Mémorise le nom que le serveur vient d'annoncer (sans toucher au reste). */
+    suspend fun setServerName(context: Context, id: String, serverName: String) {
+        context.dataStore.edit { prefs ->
+            val list = migrated(prefs)
+            if (list.none { it.id == id && it.serverName != serverName }) return@edit
+            prefs[PROFILES] = serialize(list.map { if (it.id == id) it.copy(serverName = serverName) else it })
+            prefs.remove(SERVER_URL)
         }
     }
 

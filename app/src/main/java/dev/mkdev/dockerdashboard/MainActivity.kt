@@ -72,6 +72,7 @@ class MainActivity : FragmentActivity() {
                             onDelete = { p -> scope.launch { Prefs.deleteProfile(this@MainActivity, p.id) } },
                             onAdd = { editing = Prefs.Profile("", "", "") },
                             onBack = { showList = false },
+                            onServerName = { p, n -> scope.launch { Prefs.setServerName(this@MainActivity, p.id, n) } },
                         )
                         else -> DashboardScreen(
                             profile = active,

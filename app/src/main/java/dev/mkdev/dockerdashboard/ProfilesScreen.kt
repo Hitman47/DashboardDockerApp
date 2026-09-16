@@ -22,6 +22,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -31,6 +32,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 /**
  * La liste des dashboards mémorisés (un par NAS). Toucher = ouvrir ;
@@ -46,9 +49,19 @@ fun ProfilesScreen(
     onDelete: (Prefs.Profile) -> Unit,
     onAdd: () -> Unit,
     onBack: () -> Unit,
+    onServerName: (Prefs.Profile, String) -> Unit = { _, _ -> },
 ) {
     var confirmDelete by remember { mutableStateOf<Prefs.Profile?>(null) }
     BackHandler { onBack() }
+
+    // Le nom du serveur est ce qui distingue deux NAS ; on le relit à chaque ouverture de la liste.
+    val urls = profiles.map { it.id to it.url }
+    LaunchedEffect(urls) {
+        for (p in profiles) {
+            val name = withContext(Dispatchers.IO) { probeDashboardName(p.url).getOrNull() } ?: continue
+            if (name != p.serverName) onServerName(p, name)
+        }
+    }
 
     Column(
         Modifier.fillMaxSize().background(DashBg).safeDrawingPadding().padding(24.dp),
@@ -72,6 +85,10 @@ fun ProfilesScreen(
                         Row(Modifier.padding(start = 16.dp, end = 4.dp, top = 8.dp, bottom = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                             Column(Modifier.weight(1f)) {
                                 Text((if (active) "● " else "") + p.label, style = MaterialTheme.typography.titleMedium, color = Color.White)
+                                // Nom annoncé par le serveur quand il diffère du titre (ex. « Bureau » → Shodan)
+                                if (p.serverName.isNotBlank() && p.serverName != p.label) {
+                                    Text(p.serverName, style = MaterialTheme.typography.bodyMedium, color = Color(0xFF8FA4FF))
+                                }
                                 Text(p.url, style = MaterialTheme.typography.bodySmall, color = Color(0xFF9AA0AE))
                             }
                             TextButton(onClick = { onEdit(p) }) { Text("✎") }
