@@ -27,6 +27,9 @@ automatiquement chaque mise à jour du conteneur sans réinstallation.
 - **Mises à jour** : le dashboard (≥ 4.3.18, jeton GitHub `repo` renseigné dans Registres) signale
   une nouvelle version au chargement ; bandeau « Installer » → l'APK est téléchargé via le NAS,
   la notification ouvre l'installateur. Le dépôt reste privé, aucun jeton dans l'app.
+- **Bouton « ⇄ » dans l'en-tête du dashboard** (dashboard ≥ 4.3.25) : l'app injecte
+  `window.DockerDashboardApp` ; le site affiche alors, à côté de son nom, la liste de tes dashboards
+  (bascule en un toucher), « Modifier ce dashboard » et « Ajouter ». Le menu Retour reste disponible.
 - **Réveil du NAS (Wake-on-LAN)** : renseigne l'adresse MAC dans la fiche du dashboard ; quand il
   ne répond pas, « ⚡ Réveiller le NAS » envoie le paquet magique depuis le téléphone (Wi-Fi) **et**
   via chaque autre dashboard où tu es connecté (`POST /api/wol`, dashboard ≥ 4.3.24) — ce qui

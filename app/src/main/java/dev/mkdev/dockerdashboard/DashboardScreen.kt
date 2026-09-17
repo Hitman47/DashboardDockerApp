@@ -51,6 +51,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -82,13 +83,20 @@ import java.io.File
  *    (export de config, ICS) pris en charge.
  */
 @Composable
-fun DashboardScreen(profile: Prefs.Profile, others: List<Prefs.Profile> = emptyList(), onChangeServer: () -> Unit, onSwitch: () -> Unit, onExit: () -> Unit) {
+fun DashboardScreen(profile: Prefs.Profile, others: List<Prefs.Profile> = emptyList(), onChangeServer: () -> Unit, onSwitch: () -> Unit, onExit: () -> Unit, onOpenProfile: (String) -> Unit = {}, onAddProfile: () -> Unit = {}) {
     val serverUrl = profile.url
     // key(url) : changer de dashboard = une autre WebView (sessions séparées par origine).
     key(serverUrl) {
         var webView by remember { mutableStateOf<WebView?>(null) }
         var error by remember { mutableStateOf<String?>(null) }
         var wakeStatus by remember { mutableStateOf<String?>(null) }
+        // La WebView (et son pont JS) survit aux recompositions : on lui donne toujours l'état courant.
+        val latestProfile by rememberUpdatedState(profile)
+        val latestOthers by rememberUpdatedState(others)
+        val latestOpen by rememberUpdatedState(onOpenProfile)
+        val latestEdit by rememberUpdatedState(onChangeServer)
+        val latestAdd by rememberUpdatedState(onAddProfile)
+        val latestSwitch by rememberUpdatedState(onSwitch)
         val scope = rememberCoroutineScope()
         var progress by remember { mutableIntStateOf(0) }
         var showMenu by remember { mutableStateOf(false) }
@@ -142,6 +150,7 @@ fun DashboardScreen(profile: Prefs.Profile, others: List<Prefs.Profile> = emptyL
                 factory = { ctx ->
                     createWebView(
                         ctx, serverUrl,
+                        bridge = AppBridge(ctx, current = { latestProfile }, allProfiles = { listOf(latestProfile) + latestOthers }, onOpen = { latestOpen(it) }, onEdit = { latestEdit() }, onAdd = { latestAdd() }, onList = { latestSwitch() }),
                         onProgress = { progress = it },
                         onError = { error = it },
                         onLoaded = { error = null; updateTick++ },
@@ -249,6 +258,7 @@ private fun ErrorOverlay(message: String, onRetry: () -> Unit, onChangeServer: (
 private fun createWebView(
     ctx: Context,
     serverUrl: String,
+    bridge: AppBridge,
     onProgress: (Int) -> Unit,
     onError: (String) -> Unit,
     onLoaded: () -> Unit,
@@ -333,8 +343,10 @@ private fun createWebView(
         }
     }
 
-    // Téléchargements : export de config (blob: généré par la page) et fichiers servis par le dashboard.
-    webView.addJavascriptInterface(BlobSaver(ctx), "DockerDashboardApp")
+    // Pont `window.DockerDashboardApp` : liste/changement de dashboard pour l'en-tête du site,
+    // et `saveFile` pour les téléchargements blob:. Seule l'origine du dashboard est chargée ici
+    // (les autres liens partent dans le navigateur).
+    webView.addJavascriptInterface(bridge, "DockerDashboardApp")
     webView.setDownloadListener { url, _, contentDisposition, mimeType, _ ->
         if (url.startsWith("blob:")) {
             val name = guessBlobName(mimeType)
@@ -388,7 +400,7 @@ private fun blobToBridgeJs(blobUrl: String, name: String) = """
 """.trimIndent()
 
 /** Écrit le fichier dans Téléchargements (MediaStore, sans permission de stockage depuis Android 10). */
-private class BlobSaver(private val ctx: Context) {
+class BlobSaver(private val ctx: Context) {
     @android.webkit.JavascriptInterface
     fun saveFile(base64: String, name: String, mime: String) {
         val handler = android.os.Handler(ctx.mainLooper)

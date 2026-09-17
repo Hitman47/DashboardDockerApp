@@ -80,6 +80,8 @@ class MainActivity : FragmentActivity() {
                             onChangeServer = { editing = active },
                             onSwitch = { showList = true },
                             onExit = { finish() },
+                            onOpenProfile = { id -> scope.launch { Prefs.setActive(this@MainActivity, id) } },
+                            onAddProfile = { editing = Prefs.Profile("", "", "") },
                         )
                     }
                     // Par-dessus tout, la WebView reste vivante dessous (pas de rechargement au déverrouillage).
