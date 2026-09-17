@@ -27,6 +27,10 @@ automatiquement chaque mise à jour du conteneur sans réinstallation.
 - **Mises à jour** : le dashboard (≥ 4.3.18, jeton GitHub `repo` renseigné dans Registres) signale
   une nouvelle version au chargement ; bandeau « Installer » → l'APK est téléchargé via le NAS,
   la notification ouvre l'installateur. Le dépôt reste privé, aucun jeton dans l'app.
+- **Réveil du NAS (Wake-on-LAN)** : renseigne l'adresse MAC dans la fiche du dashboard ; quand il
+  ne répond pas, « ⚡ Réveiller le NAS » envoie le paquet magique depuis le téléphone (Wi-Fi) **et**
+  via chaque autre dashboard où tu es connecté (`POST /api/wol`, dashboard ≥ 4.3.24) — ce qui
+  marche aussi en 4G. L'app réessaie ensuite toute seule toutes les 5 s.
 - **Verrou à l'ouverture** (option) : empreinte, visage ou code de l'appareil au lancement
   et après plus de 30 s passées ailleurs ; un aller-retour rapide vers Chrome (lien ↗) ne
   redemande rien. Se règle dans la fiche d'un dashboard (Retour → Modifier ce dashboard).

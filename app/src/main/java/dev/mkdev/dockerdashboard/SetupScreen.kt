@@ -53,6 +53,7 @@ fun SetupScreen(profile: Prefs.Profile?, canCancel: Boolean, onCancel: () -> Uni
     // d'une IP est pénible. On les recompose en URL au moment de tester.
     val parts = remember(profile) { Prefs.split(profile?.url ?: "") }
     var name by remember { mutableStateOf(profile?.name ?: "") }
+    var mac by remember { mutableStateOf(profile?.mac ?: "") }
     var https by remember { mutableStateOf(parts.https) }
     var host by remember { mutableStateOf(parts.host) }
     var port by remember { mutableStateOf(parts.port) }
@@ -75,7 +76,7 @@ fun SetupScreen(profile: Prefs.Profile?, canCancel: Boolean, onCancel: () -> Uni
             result = r
             if (r.first) foundName = r.second.removePrefix("Trouvé : ")
             // Sans nom saisi, le profil prend le nom que le dashboard s'est donné.
-            if (thenSave && r.first) onSaved(Prefs.Profile(profile?.id ?: Prefs.newId(), name.trim(), url, serverName = foundName))
+            if (thenSave && r.first) onSaved(Prefs.Profile(profile?.id ?: Prefs.newId(), name.trim(), url, serverName = foundName, mac = if (Wol.isValidMac(mac)) Wol.normalize(mac) else ""))
         }
     }
 
@@ -121,6 +122,18 @@ fun SetupScreen(profile: Prefs.Profile?, canCancel: Boolean, onCancel: () -> Uni
                     keyboardActions = KeyboardActions(onGo = { test(thenSave = true) }),
                 )
             }
+            Spacer(Modifier.height(10.dp))
+            OutlinedTextField(
+                value = mac,
+                onValueChange = { mac = it.trim() },
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true,
+                isError = mac.isNotBlank() && !Wol.isValidMac(mac),
+                label = { Text("Adresse MAC (réveil Wake-on-LAN, facultatif)") },
+                placeholder = { Text("aa:bb:cc:dd:ee:ff") },
+                supportingText = { Text("Dans les réglages réseau du NAS. Permet « Réveiller le NAS » quand il ne répond pas.", style = MaterialTheme.typography.bodySmall) },
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Ascii, imeAction = ImeAction.Done),
+            )
             Spacer(Modifier.height(6.dp))
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Switch(checked = https, onCheckedChange = { https = it; result = null })

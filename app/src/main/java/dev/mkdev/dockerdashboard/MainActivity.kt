@@ -76,6 +76,7 @@ class MainActivity : FragmentActivity() {
                         )
                         else -> DashboardScreen(
                             profile = active,
+                            others = list.filter { it.id != active.id },
                             onChangeServer = { editing = active },
                             onSwitch = { showList = true },
                             onExit = { finish() },

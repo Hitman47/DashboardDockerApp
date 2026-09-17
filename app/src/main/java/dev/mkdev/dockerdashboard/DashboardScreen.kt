@@ -37,6 +37,7 @@ import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -49,9 +50,11 @@ import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -62,6 +65,7 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
 
@@ -78,12 +82,14 @@ import java.io.File
  *    (export de config, ICS) pris en charge.
  */
 @Composable
-fun DashboardScreen(profile: Prefs.Profile, onChangeServer: () -> Unit, onSwitch: () -> Unit, onExit: () -> Unit) {
+fun DashboardScreen(profile: Prefs.Profile, others: List<Prefs.Profile> = emptyList(), onChangeServer: () -> Unit, onSwitch: () -> Unit, onExit: () -> Unit) {
     val serverUrl = profile.url
     // key(url) : changer de dashboard = une autre WebView (sessions séparées par origine).
     key(serverUrl) {
         var webView by remember { mutableStateOf<WebView?>(null) }
         var error by remember { mutableStateOf<String?>(null) }
+        var wakeStatus by remember { mutableStateOf<String?>(null) }
+        val scope = rememberCoroutineScope()
         var progress by remember { mutableIntStateOf(0) }
         var showMenu by remember { mutableStateOf(false) }
         var pendingFiles by remember { mutableStateOf<ValueCallback<Array<Uri>>?>(null) }
@@ -146,7 +152,27 @@ fun DashboardScreen(profile: Prefs.Profile, onChangeServer: () -> Unit, onSwitch
             if (progress in 1..99) {
                 LinearProgressIndicator(progress = { progress / 100f }, modifier = Modifier.fillMaxWidth().align(Alignment.TopCenter), color = DashAccent, trackColor = Color.Transparent, gapSize = 0.dp, drawStopIndicator = {})
             }
-            error?.let { msg -> ErrorOverlay(msg, onRetry = { webView?.reload() }, onChangeServer = onChangeServer) }
+            error?.let { msg ->
+                ErrorOverlay(
+                    msg, onRetry = { webView?.reload() }, onChangeServer = onChangeServer,
+                    canWake = profile.mac.isNotBlank(), wakeStatus = wakeStatus,
+                    onWake = {
+                        wakeStatus = "Envoi du paquet magique…"
+                        scope.launch {
+                            // Wi-Fi : direct depuis le téléphone ; et par chaque autre dashboard connecté (marche aussi en 4G).
+                            val report = withContext(Dispatchers.IO) {
+                                val parts = mutableListOf<String>()
+                                val bc = Wol.wifiBroadcast(context)
+                                if (bc != null) runCatching { Wol.sendLocal(profile.mac, bc) }.onSuccess { parts += "Wi-Fi : $it paquets" }.onFailure { parts += "Wi-Fi : ${it.message}" }
+                                for (o in others) Wol.sendVia(o.url, profile.mac, profile.label)?.let { parts += "via ${o.label} : $it" }
+                                parts
+                            }
+                            wakeStatus = if (report.isEmpty()) "Rien envoyé : pas en Wi-Fi, et aucun autre dashboard connecté pour relayer."
+                            else "Envoyé (${report.joinToString(" · ")}). Le NAS met ~1 min à démarrer, l'app réessaie toute seule."
+                        }
+                    },
+                )
+            }
             update?.takeIf { !updateDismissed }?.let { rel ->
                 UpdateBanner(rel, modifier = Modifier.align(Alignment.BottomCenter),
                     onInstall = { Updates.download(context, rel) }, // le bandeau reste : on peut relancer si le téléchargement échoue
@@ -188,7 +214,7 @@ private fun UpdateBanner(release: Updates.Release, modifier: Modifier, onInstall
 }
 
 @Composable
-private fun ErrorOverlay(message: String, onRetry: () -> Unit, onChangeServer: () -> Unit) {
+private fun ErrorOverlay(message: String, onRetry: () -> Unit, onChangeServer: () -> Unit, canWake: Boolean = false, wakeStatus: String? = null, onWake: () -> Unit = {}) {
     Column(
         Modifier.fillMaxSize().background(DashBg).padding(32.dp),
         verticalArrangement = Arrangement.Center,
@@ -203,8 +229,16 @@ private fun ErrorOverlay(message: String, onRetry: () -> Unit, onChangeServer: (
         Text("Nouvel essai automatique toutes les 5 s.", style = MaterialTheme.typography.bodySmall, color = Color(0xFF6B7280))
         Spacer(Modifier.height(20.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            TextButton(onClick = onChangeServer) { Text("Changer d'adresse") }
+            TextButton(onClick = onChangeServer) { Text("Modifier") }
             Button(onClick = onRetry) { Text("Réessayer") }
+        }
+        if (canWake) {
+            Spacer(Modifier.height(16.dp))
+            Button(onClick = onWake, colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1B2A6B), contentColor = Color.White)) { Text("⚡ Réveiller le NAS (WOL)") }
+            wakeStatus?.let {
+                Spacer(Modifier.height(8.dp))
+                Text(it, style = MaterialTheme.typography.bodySmall, color = Color(0xFFB8C1E8), textAlign = TextAlign.Center)
+            }
         }
     }
 }
