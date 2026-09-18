@@ -30,8 +30,9 @@ automatiquement chaque mise à jour du conteneur sans réinstallation.
 - **Bouton « ⇄ » dans l'en-tête du dashboard** (dashboard ≥ 4.3.25) : l'app injecte
   `window.DockerDashboardApp` ; le site affiche alors, à côté de son nom, la liste de tes dashboards
   (bascule en un toucher), « Modifier ce dashboard » et « Ajouter ». Le menu Retour reste disponible.
-- **Réveil du NAS (Wake-on-LAN)** : renseigne l'adresse MAC dans la fiche du dashboard ; quand il
-  ne répond pas, « ⚡ Réveiller le NAS » envoie le paquet magique depuis le téléphone (Wi-Fi) **et**
+- **Réveil du NAS (Wake-on-LAN)** : la MAC du NAS s'apprend toute seule à la première connexion
+  (dashboard ≥ 4.3.26 ; bouton « Détecter » en secours, y compris via la table ARP d'un autre
+  dashboard) ; quand il ne répond pas, « ⚡ Réveiller le NAS » envoie le paquet magique depuis le téléphone (Wi-Fi) **et**
   via chaque autre dashboard où tu es connecté (`POST /api/wol`, dashboard ≥ 4.3.24) — ce qui
   marche aussi en 4G. L'app réessaie ensuite toute seule toutes les 5 s.
 - **Verrou à l'ouverture** (option) : empreinte, visage ou code de l'appareil au lancement

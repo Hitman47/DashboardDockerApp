@@ -29,12 +29,11 @@ object Updates {
     }
 
     fun check(serverUrl: String): Result = try {
-        val cookie = CookieManager.getInstance().getCookie(serverUrl)
-        if (cookie.isNullOrBlank() || !cookie.contains("dd_session=")) Result.NotSignedIn else {
+        if (!Session.has(serverUrl)) Result.NotSignedIn else {
             val conn = (URL("$serverUrl/api/app/latest").openConnection() as HttpURLConnection).apply {
                 connectTimeout = 5000; readTimeout = 5000
                 setRequestProperty("Accept", "application/json")
-                setRequestProperty("Cookie", cookie)
+                Session.apply(this, serverUrl)
             }
             when (conn.responseCode) {
                 401 -> Result.NotSignedIn

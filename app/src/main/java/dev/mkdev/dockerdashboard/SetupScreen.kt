@@ -48,12 +48,14 @@ import java.net.URL
  * qui écoute sur ce port.
  */
 @Composable
-fun SetupScreen(profile: Prefs.Profile?, canCancel: Boolean, onCancel: () -> Unit, onSaved: (Prefs.Profile) -> Unit, lockEnabled: Boolean = false, onLockChanged: (Boolean) -> Unit = {}) {
+fun SetupScreen(profile: Prefs.Profile?, others: List<Prefs.Profile> = emptyList(), canCancel: Boolean, onCancel: () -> Unit, onSaved: (Prefs.Profile) -> Unit, lockEnabled: Boolean = false, onLockChanged: (Boolean) -> Unit = {}) {
     // Trois champs séparés : sur un clavier de tablette, taper « : » au milieu
     // d'une IP est pénible. On les recompose en URL au moment de tester.
     val parts = remember(profile) { Prefs.split(profile?.url ?: "") }
     var name by remember { mutableStateOf(profile?.name ?: "") }
     var mac by remember { mutableStateOf(profile?.mac ?: "") }
+    var macStatus by remember { mutableStateOf<String?>(null) }
+    var detecting by remember { mutableStateOf(false) }
     var https by remember { mutableStateOf(parts.https) }
     var host by remember { mutableStateOf(parts.host) }
     var port by remember { mutableStateOf(parts.port) }
@@ -123,16 +125,36 @@ fun SetupScreen(profile: Prefs.Profile?, canCancel: Boolean, onCancel: () -> Uni
                 )
             }
             Spacer(Modifier.height(10.dp))
-            OutlinedTextField(
-                value = mac,
-                onValueChange = { mac = it.trim() },
-                modifier = Modifier.fillMaxWidth(),
-                singleLine = true,
-                isError = mac.isNotBlank() && !Wol.isValidMac(mac),
-                label = { Text("Adresse MAC (réveil Wake-on-LAN, facultatif)") },
-                placeholder = { Text("aa:bb:cc:dd:ee:ff") },
-                supportingText = { Text("Dans les réglages réseau du NAS. Permet « Réveiller le NAS » quand il ne répond pas.", style = MaterialTheme.typography.bodySmall) },
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Ascii, imeAction = ImeAction.Done),
+            // La MAC s'apprend seule à la première connexion (dashboard ≥ 4.3.26) ; ici : détection à la
+            // demande (ce dashboard s'il est connecté, sinon la table ARP des autres) ou saisie formatée.
+            fun detect() {
+                detecting = true; macStatus = null
+                scope.launch {
+                    val found = withContext(Dispatchers.IO) {
+                        Wol.selfMac(url)?.let { it to "donnée par ce dashboard" }
+                            ?: others.asSequence().mapNotNull { o -> Wol.lookupMac(o.url, host)?.let { it to "vue par ${o.label}" } }.firstOrNull()
+                    }
+                    detecting = false
+                    if (found != null) { mac = found.first; macStatus = "MAC ${found.second}." }
+                    else macStatus = "Introuvable : ouvre ce dashboard une fois (connecté), ou un autre dashboard qui a déjà parlé à ce NAS."
+                }
+            }
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
+                OutlinedTextField(
+                    value = mac,
+                    onValueChange = { mac = Wol.format(it) },
+                    modifier = Modifier.weight(1f),
+                    singleLine = true,
+                    isError = mac.isNotBlank() && !Wol.isValidMac(mac),
+                    label = { Text("MAC (réveil WOL)") },
+                    placeholder = { Text("aa:bb:cc:dd:ee:ff") },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Ascii, imeAction = ImeAction.Done),
+                )
+                TextButton(onClick = { detect() }, enabled = !detecting && host.isNotBlank()) { Text(if (detecting) "…" else "Détecter") }
+            }
+            Text(
+                macStatus ?: "Remplie toute seule à la première connexion. Sert à « Réveiller le NAS » quand il ne répond pas.",
+                style = MaterialTheme.typography.bodySmall, color = Color(0xFF9AA0AE), modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp),
             )
             Spacer(Modifier.height(6.dp))
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {

@@ -25,6 +25,32 @@ object Wol {
     private val MAC = Regex("^([0-9a-fA-F]{2})[:\\-.]?([0-9a-fA-F]{2})[:\\-.]?([0-9a-fA-F]{2})[:\\-.]?([0-9a-fA-F]{2})[:\\-.]?([0-9a-fA-F]{2})[:\\-.]?([0-9a-fA-F]{2})$")
 
     fun isValidMac(mac: String) = MAC.matches(mac.trim())
+
+    /** Aide à la saisie : ne garde que l'hexa, place les « : », minuscules (AABBCC → aa:bb:cc). */
+    fun format(raw: String): String = raw.lowercase().filter { it in '0'..'9' || it in 'a'..'f' }.take(12).chunked(2).joinToString(":")
+
+    /** MAC de l'hôte de ce dashboard (`GET /api/wol/neighbours`, dashboard ≥ 4.3.26), null si pas connecté / trop ancien. */
+    fun selfMac(serverUrl: String): String? = neighbours(serverUrl, null)?.first?.firstOrNull()
+
+    /** MAC d'une machine du LAN (par IP) telle que vue par un autre dashboard (table ARP). */
+    fun lookupMac(serverUrl: String, ip: String): String? = neighbours(serverUrl, ip)?.second?.firstOrNull()
+
+    /** → (MAC de l'hôte, MAC des voisins [filtrés par ip]) ou null. */
+    private fun neighbours(serverUrl: String, ip: String?): Pair<List<String>, List<String>>? = try {
+        if (!Session.has(serverUrl)) { android.util.Log.d("DDApp", "wol/neighbours: pas de session pour $serverUrl"); null } else {
+            val q = if (ip != null) "?ip=" + java.net.URLEncoder.encode(ip, "UTF-8") else ""
+            val conn = (URL("$serverUrl/api/wol/neighbours$q").openConnection() as HttpURLConnection).apply {
+                connectTimeout = 5000; readTimeout = 15000
+                setRequestProperty("Accept", "application/json")
+                Session.apply(this, serverUrl)
+            }
+            if (conn.responseCode != 200) { android.util.Log.d("DDApp", "wol/neighbours: HTTP ${conn.responseCode}"); null } else {
+                val j = JSONObject(conn.inputStream.bufferedReader().readText())
+                val macs = { key: String -> val a = j.optJSONArray(key); (0 until (a?.length() ?: 0)).map { a!!.getJSONObject(it).optString("mac") }.filter { isValidMac(it) } }
+                macs("self") to macs("neighbours")
+            }
+        }
+    } catch (e: Exception) { android.util.Log.d("DDApp", "wol/neighbours: ${e.message}"); null }
     fun normalize(mac: String): String = MAC.find(mac.trim())?.groupValues?.drop(1)?.joinToString(":") { it.lowercase() } ?: mac
 
     private fun magicPacket(mac: String): ByteArray {
@@ -67,12 +93,11 @@ object Wol {
 
     /** Demande à un autre dashboard (où l'on a une session) de réveiller la machine. → message, ou null si pas connecté / injoignable. */
     fun sendVia(serverUrl: String, mac: String, name: String): String? = try {
-        val cookie = CookieManager.getInstance().getCookie(serverUrl)
-        if (cookie.isNullOrBlank() || !cookie.contains("dd_session=")) null else {
+        if (!Session.has(serverUrl)) null else {
             val conn = (URL("$serverUrl/api/wol").openConnection() as HttpURLConnection).apply {
                 requestMethod = "POST"; connectTimeout = 5000; readTimeout = 15000; doOutput = true
                 setRequestProperty("Content-Type", "application/json")
-                setRequestProperty("Cookie", cookie)
+                Session.apply(this, serverUrl)
             }
             conn.outputStream.use { it.write(JSONObject().put("mac", mac).put("name", name).toString().toByteArray()) }
             if (conn.responseCode == 200) {

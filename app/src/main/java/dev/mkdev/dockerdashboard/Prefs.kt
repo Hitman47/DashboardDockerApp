@@ -83,6 +83,16 @@ object Prefs {
         }
     }
 
+    /** MAC apprise auprès du dashboard (sans toucher au reste). */
+    suspend fun setMac(context: Context, id: String, mac: String) {
+        context.dataStore.edit { prefs ->
+            val list = migrated(prefs)
+            if (list.none { it.id == id && it.mac != mac }) return@edit
+            prefs[PROFILES] = serialize(list.map { if (it.id == id) it.copy(mac = mac) else it })
+            prefs.remove(SERVER_URL)
+        }
+    }
+
     suspend fun setActive(context: Context, id: String) {
         context.dataStore.edit { it[ACTIVE] = id }
     }

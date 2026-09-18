@@ -83,7 +83,7 @@ import java.io.File
  *    (export de config, ICS) pris en charge.
  */
 @Composable
-fun DashboardScreen(profile: Prefs.Profile, others: List<Prefs.Profile> = emptyList(), onChangeServer: () -> Unit, onSwitch: () -> Unit, onExit: () -> Unit, onOpenProfile: (String) -> Unit = {}, onAddProfile: () -> Unit = {}) {
+fun DashboardScreen(profile: Prefs.Profile, others: List<Prefs.Profile> = emptyList(), onChangeServer: () -> Unit, onSwitch: () -> Unit, onExit: () -> Unit, onOpenProfile: (String) -> Unit = {}, onAddProfile: () -> Unit = {}, onMacLearned: (String) -> Unit = {}) {
     val serverUrl = profile.url
     // key(url) : changer de dashboard = une autre WebView (sessions séparées par origine).
     key(serverUrl) {
@@ -111,11 +111,24 @@ fun DashboardScreen(profile: Prefs.Profile, others: List<Prefs.Profile> = emptyL
         LaunchedEffect(updateTick) {
             if (updateTick == 0 || update != null || updateDismissed) return@LaunchedEffect
             while (true) {
+                webView?.evaluateJavascript("(function(){try{return localStorage.getItem('dd_token')||''}catch(e){return ''}})()") { Session.remember(serverUrl, it?.trim('"')) }
                 when (val r = withContext(Dispatchers.IO) { Updates.check(serverUrl) }) {
                     is Updates.Result.Available -> { update = r.release; return@LaunchedEffect }
                     Updates.Result.Nothing -> return@LaunchedEffect
                     Updates.Result.NotSignedIn -> delay(20_000)
                 }
+            }
+        }
+        // La MAC du NAS s'apprend toute seule : dès qu'on est connecté, le dashboard la donne
+        // (dashboard ≥ 4.3.26). Réessai toutes les 20 s tant que la session n'est pas ouverte.
+        LaunchedEffect(updateTick, profile.id) {
+            if (updateTick == 0 || profile.mac.isNotBlank()) return@LaunchedEffect
+            repeat(30) {
+                // Connexion faite dans la page sans rechargement : on relit le jeton avant chaque essai.
+                webView?.evaluateJavascript("(function(){try{return localStorage.getItem('dd_token')||''}catch(e){return ''}})()") { Session.remember(serverUrl, it?.trim('"')) }
+                val mac = withContext(Dispatchers.IO) { Wol.selfMac(serverUrl) }
+                if (mac != null) { onMacLearned(mac); return@LaunchedEffect }
+                delay(20_000)
             }
         }
         val filePicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
@@ -154,6 +167,7 @@ fun DashboardScreen(profile: Prefs.Profile, others: List<Prefs.Profile> = emptyL
                         onProgress = { progress = it },
                         onError = { error = it },
                         onLoaded = { error = null; updateTick++ },
+                        onToken = { Session.remember(serverUrl, it) },
                         onFileChooser = { cb, accept -> pendingFiles?.onReceiveValue(null); pendingFiles = cb; filePicker.launch(accept) },
                     ).also { webView = it; it.loadUrl(serverUrl) }
                 },
@@ -263,6 +277,7 @@ private fun createWebView(
     onError: (String) -> Unit,
     onLoaded: () -> Unit,
     onFileChooser: (ValueCallback<Array<Uri>>, String) -> Unit,
+    onToken: (String?) -> Unit = {},
 ): WebView {
     val origin = Uri.parse(serverUrl)
     // Inspection chrome://inspect depuis un PC en USB, seulement si le débogage USB est
@@ -307,7 +322,13 @@ private fun createWebView(
             return true
         }
         override fun onPageStarted(view: WebView, url: String?, favicon: android.graphics.Bitmap?) { failed = false; onProgress(5) }
-        override fun onPageFinished(view: WebView, url: String?) { onProgress(100); if (!failed) onLoaded() }
+        override fun onPageFinished(view: WebView, url: String?) {
+            onProgress(100)
+            if (failed) return
+            // Le jeton de session de la page (posé au login) : l'app l'utilise pour ses propres appels.
+            view.evaluateJavascript("(function(){try{return localStorage.getItem('dd_token')||''}catch(e){return ''}})()") { onToken(it?.trim('"')) }
+            onLoaded()
+        }
         override fun onReceivedError(view: WebView, request: WebResourceRequest, err: WebResourceError) {
             if (!request.isForMainFrame) return
             failed = true

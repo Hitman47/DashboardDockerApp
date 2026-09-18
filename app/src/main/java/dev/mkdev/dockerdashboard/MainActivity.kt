@@ -58,6 +58,7 @@ class MainActivity : FragmentActivity() {
                         list == null || lockEnabled == null -> Unit // premier rendu : fond sombre, rien à afficher
                         list.isEmpty() || editing != null -> SetupScreen(
                             profile = editing?.takeIf { it.id.isNotEmpty() },
+                            others = list.filter { it.id != editing?.id },
                             canCancel = list.isNotEmpty(),
                             onCancel = { editing = null },
                             onSaved = { p -> scope.launch { Prefs.saveProfile(this@MainActivity, p); editing = null; showList = false } },
@@ -82,6 +83,7 @@ class MainActivity : FragmentActivity() {
                             onExit = { finish() },
                             onOpenProfile = { id -> scope.launch { Prefs.setActive(this@MainActivity, id) } },
                             onAddProfile = { editing = Prefs.Profile("", "", "") },
+                            onMacLearned = { mac -> scope.launch { Prefs.setMac(this@MainActivity, active.id, mac) } },
                         )
                     }
                     // Par-dessus tout, la WebView reste vivante dessous (pas de rechargement au déverrouillage).
