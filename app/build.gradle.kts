@@ -23,8 +23,8 @@ android {
         applicationId = "dev.mkdev.dockerdashboard"
         minSdk = 26
         targetSdk = 36
-        versionCode = 12
-        versionName = "0.1.11"
+        versionCode = 13
+        versionName = "0.1.12"
     }
 
     signingConfigs {
@@ -81,4 +81,5 @@ dependencies {
     implementation(libs.androidx.datastore.preferences)
     implementation(libs.androidx.webkit)
     implementation(libs.androidx.biometric)
+    implementation(libs.jsch)
 }

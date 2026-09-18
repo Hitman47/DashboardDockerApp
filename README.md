@@ -35,6 +35,16 @@ automatiquement chaque mise à jour du conteneur sans réinstallation.
   dashboard) ; quand il ne répond pas, « ⚡ Réveiller le NAS » envoie le paquet magique depuis le téléphone (Wi-Fi) **et**
   via chaque autre dashboard où tu es connecté (`POST /api/wol`, dashboard ≥ 4.3.24) — ce qui
   marche aussi en 4G. L'app réessaie ensuite toute seule toutes les 5 s.
+- **Secours SSH (NAS allumé mais dashboard en panne)** : quand le dashboard ne répond pas,
+  l'app sonde le port SSH ; s'il répond, elle propose « 🛟 Réparer via SSH » (relance Docker si
+  besoin, remet le conteneur du dashboard d'aplomb — y compris après une mise à jour ratée — et
+  liste les conteneurs arrêtés) et « 🔄 Redémarrer le NAS » (avec confirmation). Tout passe par
+  SSH, sans le dashboard. Clé ECDSA générée dans l'app (privée chiffrée par le Keystore Android,
+  jamais exportée) ; une fois : fiche du dashboard → « Secours SSH » → « Copier la commande »,
+  à coller dans un terminal du NAS (ajoute la clé publique à `~/.ssh/authorized_keys`).
+  Utilisateur `root` par défaut, modifiable (un autre utilisateur a besoin de `sudo` sans mot de
+  passe pour relancer Docker : ligne sudoers affichée dans la fiche). Empreinte du NAS mémorisée à
+  la première connexion et vérifiée ensuite (« Oublier l'empreinte » après une réinstallation).
 - **Verrou à l'ouverture** (option) : empreinte, visage ou code de l'appareil au lancement
   et après plus de 30 s passées ailleurs ; un aller-retour rapide vers Chrome (lien ↗) ne
   redemande rien. Se règle dans la fiche d'un dashboard (Retour → Modifier ce dashboard).

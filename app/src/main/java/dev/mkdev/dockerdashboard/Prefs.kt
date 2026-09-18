@@ -20,7 +20,7 @@ import org.json.JSONObject
  * dans le stockage web de la WebView — qui sépare déjà les sessions par
  * origine, donc chaque NAS garde la sienne.
  */
-private val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "settings")
+internal val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "settings")
 
 object Prefs {
     private val SERVER_URL = stringPreferencesKey("server_url") // < 0.1.7 : une seule adresse
@@ -29,19 +29,19 @@ object Prefs {
     private val BIOMETRIC_LOCK = booleanPreferencesKey("biometric_lock")
 
     /** [serverName] = le nom que le dashboard s'est donné (Réglages › Général), relu à chaque affichage de la liste. */
-    data class Profile(val id: String, val name: String, val url: String, val serverName: String = "", val mac: String = "") {
+    data class Profile(val id: String, val name: String, val url: String, val serverName: String = "", val mac: String = "", val sshUser: String = "root", val sshPort: Int = 22) {
         /** Nom affiché : le nom donné, sinon celui du serveur, sinon l'hôte de l'URL. */
         val label: String get() = name.ifBlank { serverName.ifBlank { split(url).host.ifBlank { url } } }
     }
 
     private fun parse(json: String?): List<Profile> = try {
         val arr = JSONArray(json ?: "[]")
-        (0 until arr.length()).map { i -> val o = arr.getJSONObject(i); Profile(o.getString("id"), o.optString("name"), o.getString("url"), o.optString("server"), o.optString("mac")) }
+        (0 until arr.length()).map { i -> val o = arr.getJSONObject(i); Profile(o.getString("id"), o.optString("name"), o.getString("url"), o.optString("server"), o.optString("mac"), o.optString("sshUser").ifBlank { "root" }, o.optInt("sshPort", 22).takeIf { it in 1..65535 } ?: 22) }
             .filter { it.url.isNotBlank() }
     } catch (_: Exception) { emptyList() }
 
     private fun serialize(list: List<Profile>): String =
-        JSONArray().apply { list.forEach { put(JSONObject().put("id", it.id).put("name", it.name).put("url", it.url).put("server", it.serverName).put("mac", it.mac)) } }.toString()
+        JSONArray().apply { list.forEach { put(JSONObject().put("id", it.id).put("name", it.name).put("url", it.url).put("server", it.serverName).put("mac", it.mac).put("sshUser", it.sshUser).put("sshPort", it.sshPort)) } }.toString()
 
     fun newId(): String = System.currentTimeMillis().toString(36) + (0..999).random().toString(36)
 

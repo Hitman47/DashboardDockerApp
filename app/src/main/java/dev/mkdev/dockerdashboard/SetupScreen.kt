@@ -2,6 +2,9 @@ package dev.mkdev.dockerdashboard
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -9,6 +12,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.text.KeyboardActions
@@ -28,6 +32,9 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.ImeAction
@@ -55,6 +62,11 @@ fun SetupScreen(profile: Prefs.Profile?, others: List<Prefs.Profile> = emptyList
     var name by remember { mutableStateOf(profile?.name ?: "") }
     var mac by remember { mutableStateOf(profile?.mac ?: "") }
     var macStatus by remember { mutableStateOf<String?>(null) }
+    var sshUser by remember { mutableStateOf(profile?.sshUser ?: "root") }
+    var sshPort by remember { mutableStateOf((profile?.sshPort ?: 22).toString()) }
+    var sshOpen by remember { mutableStateOf(false) }
+    var pubKey by remember { mutableStateOf<String?>(null) }
+    val clipboard = LocalClipboardManager.current
     var detecting by remember { mutableStateOf(false) }
     var https by remember { mutableStateOf(parts.https) }
     var host by remember { mutableStateOf(parts.host) }
@@ -78,12 +90,13 @@ fun SetupScreen(profile: Prefs.Profile?, others: List<Prefs.Profile> = emptyList
             result = r
             if (r.first) foundName = r.second.removePrefix("Trouvé : ")
             // Sans nom saisi, le profil prend le nom que le dashboard s'est donné.
-            if (thenSave && r.first) onSaved(Prefs.Profile(profile?.id ?: Prefs.newId(), name.trim(), url, serverName = foundName, mac = if (Wol.isValidMac(mac)) Wol.normalize(mac) else ""))
+            if (thenSave && r.first) onSaved(Prefs.Profile(profile?.id ?: Prefs.newId(), name.trim(), url, serverName = foundName, mac = if (Wol.isValidMac(mac)) Wol.normalize(mac) else "", sshUser = sshUser.trim().ifBlank { "root" }, sshPort = sshPort.toIntOrNull()?.takeIf { it in 1..65535 } ?: 22))
         }
     }
 
+    // Défilement : avec la section SSH ouverte (ou le clavier), le formulaire dépasse l'écran d'un téléphone.
     Column(
-        Modifier.fillMaxSize().safeDrawingPadding().padding(24.dp),
+        Modifier.fillMaxSize().safeDrawingPadding().imePadding().verticalScroll(rememberScrollState()).padding(24.dp),
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
@@ -156,6 +169,33 @@ fun SetupScreen(profile: Prefs.Profile?, others: List<Prefs.Profile> = emptyList
                 macStatus ?: "Remplie toute seule à la première connexion. Sert à « Réveiller le NAS » quand il ne répond pas.",
                 style = MaterialTheme.typography.bodySmall, color = Color(0xFF9AA0AE), modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp),
             )
+            Spacer(Modifier.height(10.dp))
+            // Secours SSH : indépendant du dashboard (il peut être mort), clé de l'app à autoriser sur le NAS.
+            TextButton(onClick = { sshOpen = !sshOpen; if (sshOpen && pubKey == null) scope.launch { pubKey = runCatching { Ssh.publicKey(context) }.getOrElse { "Erreur : ${'$'}{it.message}" } } }, contentPadding = PaddingValues(horizontal = 4.dp)) {
+                Text((if (sshOpen) "▾ " else "▸ ") + "Secours SSH (réparer / redémarrer le NAS)", color = Color(0xFF9AA0AE))
+            }
+            if (sshOpen) {
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
+                    OutlinedTextField(value = sshUser, onValueChange = { sshUser = it.trim() }, modifier = Modifier.weight(1f), singleLine = true, label = { Text("Utilisateur SSH") }, placeholder = { Text("root") })
+                    OutlinedTextField(value = sshPort, onValueChange = { v -> sshPort = v.filter { it.isDigit() }.take(5) }, modifier = Modifier.widthIn(min = 96.dp, max = 120.dp), singleLine = true, label = { Text("Port") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number))
+                }
+                Spacer(Modifier.height(8.dp))
+                Text("1. Clé publique de l'app — à ajouter une fois sur le NAS :", style = MaterialTheme.typography.bodySmall, color = Color(0xFF9AA0AE))
+                Text(pubKey ?: "Génération…", style = MaterialTheme.typography.bodySmall, color = Color(0xFFB8C1E8), modifier = Modifier.fillMaxWidth().padding(4.dp), fontFamily = FontFamily.Monospace, maxLines = 3)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    TextButton(onClick = { pubKey?.let { clipboard.setText(AnnotatedString("mkdir -p ~/.ssh && echo '${'$'}it' >> ~/.ssh/authorized_keys && chmod 700 ~/.ssh && chmod 600 ~/.ssh/authorized_keys")) } }, enabled = pubKey != null) { Text("Copier la commande") }
+                    TextButton(onClick = { pubKey?.let { clipboard.setText(AnnotatedString(it)) } }, enabled = pubKey != null) { Text("Copier la clé") }
+                }
+                if (sshUser.isNotBlank() && sshUser != "root") {
+                    Text("2. ${'$'}sshUser n'est pas root : autoriser sudo sans mot de passe (fichier /etc/sudoers.d/docker-dashboard) :", style = MaterialTheme.typography.bodySmall, color = Color(0xFF9AA0AE))
+                    Text(Ssh.sudoersHint(sshUser), style = MaterialTheme.typography.bodySmall, color = Color(0xFFB8C1E8), modifier = Modifier.fillMaxWidth().padding(4.dp), fontFamily = FontFamily.Monospace)
+                    TextButton(onClick = { clipboard.setText(AnnotatedString(Ssh.sudoersHint(sshUser))) }) { Text("Copier la ligne sudoers") }
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    TextButton(onClick = { scope.launch { Ssh.forgetHost(context, host) } }, enabled = host.isNotBlank()) { Text("Oublier l'empreinte", color = Color(0xFF9AA0AE)) }
+                    TextButton(onClick = { scope.launch { pubKey = Ssh.regenerate(context) } }) { Text("Nouvelle clé", color = Color(0xFFFF6B6B)) }
+                }
+            }
             Spacer(Modifier.height(6.dp))
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Switch(checked = https, onCheckedChange = { https = it; result = null })

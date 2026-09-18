@@ -22,6 +22,8 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -30,6 +32,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
@@ -55,6 +58,7 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
@@ -90,6 +94,30 @@ fun DashboardScreen(profile: Prefs.Profile, others: List<Prefs.Profile> = emptyL
         var webView by remember { mutableStateOf<WebView?>(null) }
         var error by remember { mutableStateOf<String?>(null) }
         var wakeStatus by remember { mutableStateOf<String?>(null) }
+        val scope = rememberCoroutineScope()
+        val context = LocalContext.current
+        // Diagnostic quand le dashboard ne répond pas : son port, puis SSH (2 s chacun).
+        var diag by remember { mutableStateOf<Diag?>(null) }
+        var rescue by remember { mutableStateOf<RescueState?>(null) }
+        LaunchedEffect(error) {
+            diag = null
+            if (error == null) return@LaunchedEffect
+            val parts = Prefs.split(serverUrl)
+            val port = parts.port.toIntOrNull() ?: if (parts.https) 443 else 80
+            diag = withContext(Dispatchers.IO) { Diag(dashboard = Ssh.tcpOpen(parts.host, port), ssh = Ssh.tcpOpen(parts.host, profile.sshPort)) }
+        }
+        val runSsh: (String, String) -> Unit = { title, script ->
+            val parts = Prefs.split(serverUrl)
+            rescue = RescueState(title, listOf("Connexion SSH à ${profile.sshUser}@${parts.host}:${profile.sshPort}…"), running = true)
+            scope.launch {
+                val lines = mutableListOf<String>()
+                val code = withContext(Dispatchers.IO) {
+                    runCatching { Ssh.run(context, parts.host, profile.sshPort, profile.sshUser, script) { l -> lines += l; rescue = rescue?.copy(lines = rescue!!.lines.take(1) + lines.toList()) } }
+                        .getOrElse { e -> lines += "✗ ${e.message}"; -1 }
+                }
+                rescue = rescue?.copy(lines = rescue!!.lines.take(1) + lines + (if (code == 0) "✅ Terminé — l'app réessaie le dashboard toute seule." else "Code de sortie $code"), running = false)
+            }
+        }
         // La WebView (et son pont JS) survit aux recompositions : on lui donne toujours l'état courant.
         val latestProfile by rememberUpdatedState(profile)
         val latestOthers by rememberUpdatedState(others)
@@ -97,7 +125,6 @@ fun DashboardScreen(profile: Prefs.Profile, others: List<Prefs.Profile> = emptyL
         val latestEdit by rememberUpdatedState(onChangeServer)
         val latestAdd by rememberUpdatedState(onAddProfile)
         val latestSwitch by rememberUpdatedState(onSwitch)
-        val scope = rememberCoroutineScope()
         var progress by remember { mutableIntStateOf(0) }
         var showMenu by remember { mutableStateOf(false) }
         var pendingFiles by remember { mutableStateOf<ValueCallback<Array<Uri>>?>(null) }
@@ -105,7 +132,6 @@ fun DashboardScreen(profile: Prefs.Profile, others: List<Prefs.Profile> = emptyL
         var update by remember { mutableStateOf<Updates.Release?>(null) }
         var updateDismissed by remember { mutableStateOf(false) }
         var updateTick by remember { mutableIntStateOf(0) }
-        val context = LocalContext.current
         // Relancé à chaque page chargée. La connexion se fait dans la page sans
         // rechargement : tant qu'on n'est pas connecté, on retente toutes les 20 s.
         LaunchedEffect(updateTick) {
@@ -178,6 +204,9 @@ fun DashboardScreen(profile: Prefs.Profile, others: List<Prefs.Profile> = emptyL
             error?.let { msg ->
                 ErrorOverlay(
                     msg, onRetry = { webView?.reload() }, onChangeServer = onChangeServer,
+                    diag = diag,
+                    onRescue = { runSsh("🛟 Réparer via SSH", Ssh.rescueScript()) },
+                    onReboot = { runSsh("🔄 Redémarrer le NAS", Ssh.rebootScript()) },
                     canWake = profile.mac.isNotBlank(), wakeStatus = wakeStatus,
                     onWake = {
                         wakeStatus = "Envoi du paquet magique…"
@@ -201,6 +230,20 @@ fun DashboardScreen(profile: Prefs.Profile, others: List<Prefs.Profile> = emptyL
                     onInstall = { Updates.download(context, rel) }, // le bandeau reste : on peut relancer si le téléchargement échoue
                     onDismiss = { updateDismissed = true })
             }
+        }
+
+        rescue?.let { r ->
+            AlertDialog(
+                onDismissRequest = { if (!r.running) rescue = null },
+                title = { Text(r.title) },
+                text = {
+                    Column(Modifier.fillMaxWidth().heightIn(max = 360.dp).verticalScroll(rememberScrollState())) {
+                        r.lines.forEach { Text(it, style = MaterialTheme.typography.bodySmall, fontFamily = FontFamily.Monospace, color = if (it.startsWith("✗")) Color(0xFFFF6B6B) else Color(0xFFB8C1E8)) }
+                        if (r.running) Text("…", color = Color(0xFF9AA0AE))
+                    }
+                },
+                confirmButton = { TextButton(onClick = { rescue = null; webView?.reload() }, enabled = !r.running) { Text("Fermer") } },
+            )
         }
 
         if (showMenu) {
@@ -236,8 +279,12 @@ private fun UpdateBanner(release: Updates.Release, modifier: Modifier, onInstall
     }
 }
 
+/** Résultat du diagnostic réseau : le port du dashboard répond-il ? et SSH ? */
+data class Diag(val dashboard: Boolean, val ssh: Boolean)
+data class RescueState(val title: String, val lines: List<String>, val running: Boolean)
+
 @Composable
-private fun ErrorOverlay(message: String, onRetry: () -> Unit, onChangeServer: () -> Unit, canWake: Boolean = false, wakeStatus: String? = null, onWake: () -> Unit = {}) {
+private fun ErrorOverlay(message: String, onRetry: () -> Unit, onChangeServer: () -> Unit, diag: Diag? = null, onRescue: () -> Unit = {}, onReboot: () -> Unit = {}, canWake: Boolean = false, wakeStatus: String? = null, onWake: () -> Unit = {}) {
     Column(
         Modifier.fillMaxSize().background(DashBg).padding(32.dp),
         verticalArrangement = Arrangement.Center,
@@ -255,13 +302,41 @@ private fun ErrorOverlay(message: String, onRetry: () -> Unit, onChangeServer: (
             TextButton(onClick = onChangeServer) { Text("Modifier") }
             Button(onClick = onRetry) { Text("Réessayer") }
         }
-        if (canWake) {
-            Spacer(Modifier.height(16.dp))
-            Button(onClick = onWake, colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1B2A6B), contentColor = Color.White)) { Text("⚡ Réveiller le NAS (WOL)") }
-            wakeStatus?.let {
-                Spacer(Modifier.height(8.dp))
-                Text(it, style = MaterialTheme.typography.bodySmall, color = Color(0xFFB8C1E8), textAlign = TextAlign.Center)
+        Spacer(Modifier.height(16.dp))
+        // Diagnostic → le bon bouton en premier : SSH vivant = réparer ; rien = réveiller.
+        val diagText = when {
+            diag == null -> "Diagnostic en cours…"
+            diag.ssh -> "Le NAS répond en SSH : c'est Docker ou le conteneur du dashboard qui est en panne."
+            diag.dashboard -> "Le port du dashboard répond mais pas la page : le conteneur redémarre ?"
+            else -> "Le NAS ne répond ni au dashboard ni en SSH : éteint, planté, ou hors réseau."
+        }
+        Text(diagText, style = MaterialTheme.typography.bodySmall, color = Color(0xFF9AA0AE), textAlign = TextAlign.Center)
+        Spacer(Modifier.height(10.dp))
+        var confirmReboot by remember { mutableStateOf(false) }
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            if (diag?.ssh == true) {
+                Button(onClick = onRescue, colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1B2A6B), contentColor = Color.White)) { Text("🛟 Réparer via SSH") }
+                TextButton(onClick = { confirmReboot = true }) { Text("🔄 Redémarrer le NAS", color = Color(0xFFFF6B6B)) }
             }
+            if (canWake && diag?.ssh != true) {
+                Button(onClick = onWake, colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1B2A6B), contentColor = Color.White)) { Text("⚡ Réveiller le NAS (WOL)") }
+            }
+        }
+        if (diag != null && !diag.ssh && !canWake) {
+            Text("Pas de MAC connue : le réveil WOL n'est pas possible (ouvre ce dashboard une fois pour l'apprendre).", style = MaterialTheme.typography.bodySmall, color = Color(0xFF6B7280), textAlign = TextAlign.Center)
+        }
+        wakeStatus?.let {
+            Spacer(Modifier.height(8.dp))
+            Text(it, style = MaterialTheme.typography.bodySmall, color = Color(0xFFB8C1E8), textAlign = TextAlign.Center)
+        }
+        if (confirmReboot) {
+            AlertDialog(
+                onDismissRequest = { confirmReboot = false },
+                title = { Text("Redémarrer le NAS ?") },
+                text = { Text("Tous ses conteneurs s'arrêtent le temps du redémarrage (1 à 2 min).") },
+                confirmButton = { TextButton(onClick = { confirmReboot = false; onReboot() }) { Text("Redémarrer", color = Color(0xFFFF6B6B)) } },
+                dismissButton = { TextButton(onClick = { confirmReboot = false }) { Text("Annuler") } },
+            )
         }
     }
 }
