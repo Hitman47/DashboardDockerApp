@@ -412,6 +412,17 @@ private fun createWebView(
 
     fun isSameOrigin(u: Uri) = u.scheme == origin.scheme && u.host.equals(origin.host, ignoreCase = true) && u.port == origin.port
     fun openExternal(u: Uri) {
+        // intent://…#Intent;scheme=…;package=…;S.browser_fallback_url=…;end (liens Android « ouvrir dans l'app »,
+        // ex. l'assistant ntfy du dashboard) : on l'interprète comme Chrome, avec repli sur l'URL de secours.
+        if (u.scheme == "intent") {
+            val parsed = runCatching { Intent.parseUri(u.toString(), Intent.URI_INTENT_SCHEME) }.getOrNull()
+            if (parsed != null) {
+                val fallback = parsed.getStringExtra("browser_fallback_url")
+                parsed.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK); parsed.addCategory(Intent.CATEGORY_BROWSABLE); parsed.component = null; parsed.selector = null
+                try { ctx.startActivity(parsed); return } catch (_: Exception) { /* app absente → repli */ }
+                if (fallback != null) { openExternal(Uri.parse(fallback)); return }
+            }
+        }
         try { ctx.startActivity(Intent(Intent.ACTION_VIEW, u).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
         catch (_: Exception) { Toast.makeText(ctx, "Aucune application pour ouvrir $u", Toast.LENGTH_SHORT).show() }
     }
