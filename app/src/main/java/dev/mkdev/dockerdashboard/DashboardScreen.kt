@@ -5,6 +5,12 @@ import android.app.DownloadManager
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import androidx.core.app.ActivityCompat
+import android.app.Activity
+import androidx.core.content.ContextCompat
+import android.os.Build
+import android.content.pm.PackageManager
+import android.Manifest
 import android.os.Environment
 import android.os.Message
 import android.webkit.CookieManager
@@ -48,6 +54,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableIntStateOf
@@ -70,6 +77,7 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -226,8 +234,16 @@ fun DashboardScreen(profile: Prefs.Profile, others: List<Prefs.Profile> = emptyL
                 )
             }
             update?.takeIf { !updateDismissed }?.let { rel ->
-                UpdateBanner(rel, modifier = Modifier.align(Alignment.BottomCenter),
-                    onInstall = { Updates.download(context, rel) }, // le bandeau reste : on peut relancer si le téléchargement échoue
+                val installState by Updates.state.collectAsState()
+                UpdateBanner(rel, installState, modifier = Modifier.align(Alignment.BottomCenter),
+                    onInstall = {
+                        // La notification « toucher pour rouvrir » (Android 13+) a besoin d'un accord : demandé ici, en
+                        // parallèle du téléchargement (refusé → l'app s'installe quand même, on la rouvre à la main).
+                        // Pas de rememberLauncherForActivityResult : il plante avec FragmentActivity (« lower 16 bits »).
+                        if (Build.VERSION.SDK_INT >= 33 && ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED)
+                            (context as? Activity)?.let { Updates.notifPermission = CompletableDeferred(); ActivityCompat.requestPermissions(it, arrayOf(Manifest.permission.POST_NOTIFICATIONS), Updates.NOTIF_REQUEST) }
+                        scope.launch { Updates.downloadAndInstall(context, serverUrl, rel) } // le bandeau reste : on peut relancer après un échec
+                    },
                     onDismiss = { updateDismissed = true })
             }
         }
@@ -266,15 +282,27 @@ fun DashboardScreen(profile: Prefs.Profile, others: List<Prefs.Profile> = emptyL
 }
 
 @Composable
-private fun UpdateBanner(release: Updates.Release, modifier: Modifier, onInstall: () -> Unit, onDismiss: () -> Unit) {
+private fun UpdateBanner(release: Updates.Release, state: Updates.State, modifier: Modifier, onInstall: () -> Unit, onDismiss: () -> Unit) {
+    val busy = state is Updates.State.Downloading || state is Updates.State.Installing || state is Updates.State.WaitingUser
     Surface(modifier = modifier.fillMaxWidth().padding(12.dp), color = Color(0xFF1B2A6B), shape = MaterialTheme.shapes.medium, tonalElevation = 4.dp) {
-        Row(Modifier.padding(start = 14.dp, end = 4.dp, top = 4.dp, bottom = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-            Column(Modifier.weight(1f)) {
-                Text("Docker Dashboard ${release.version} disponible", style = MaterialTheme.typography.bodyMedium, color = Color.White)
-                Text("Tu as la ${BuildConfig.VERSION_NAME} · ${release.sizeBytes / 1_000_000} Mo", style = MaterialTheme.typography.bodySmall, color = Color(0xFFB8C1E8))
+        Column {
+            Row(Modifier.padding(start = 14.dp, end = 4.dp, top = 4.dp, bottom = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text("Docker Dashboard ${release.version} disponible", style = MaterialTheme.typography.bodyMedium, color = Color.White)
+                    val sub = when (state) {
+                        is Updates.State.Downloading -> "Téléchargement… ${state.percent} %"
+                        Updates.State.Installing -> "Installation… l'app va se rouvrir toute seule."
+                        Updates.State.WaitingUser -> "Autorise l'installation dans la fenêtre Android (une seule fois)."
+                        is Updates.State.Failed -> state.message
+                        Updates.State.Idle -> "Tu as la ${BuildConfig.VERSION_NAME} · ${release.sizeBytes / 1_000_000} Mo · un geste, sans rien d'autre à faire"
+                    }
+                    Text(sub, style = MaterialTheme.typography.bodySmall, color = if (state is Updates.State.Failed) Color(0xFFFFB4AB) else Color(0xFFB8C1E8))
+                }
+                TextButton(onClick = onInstall, enabled = !busy) { Text(if (state is Updates.State.Failed) "Réessayer" else "Installer", color = if (busy) Color(0xFF8A93B8) else Color.White) }
+                TextButton(onClick = onDismiss, enabled = !busy) { Text("✕", color = Color(0xFFB8C1E8)) }
             }
-            TextButton(onClick = onInstall) { Text("Installer", color = Color.White) }
-            TextButton(onClick = onDismiss) { Text("✕", color = Color(0xFFB8C1E8)) }
+            if (state is Updates.State.Downloading) LinearProgressIndicator(progress = { state.percent / 100f }, modifier = Modifier.fillMaxWidth(), color = Color.White, trackColor = Color(0xFF34479A))
+            else if (busy) LinearProgressIndicator(modifier = Modifier.fillMaxWidth(), color = Color.White, trackColor = Color(0xFF34479A))
         }
     }
 }

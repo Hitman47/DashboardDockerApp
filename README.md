@@ -24,9 +24,13 @@ automatiquement chaque mise à jour du conteneur sans réinstallation.
   config, ICS) vers *Téléchargements*.
 - HTTP en clair autorisé (LAN / VPN) ; l'écran d'adresse prévient si l'URL http://
   n'est pas locale.
-- **Mises à jour** : le dashboard (≥ 4.3.18, jeton GitHub `repo` renseigné dans Registres) signale
-  une nouvelle version au chargement ; bandeau « Installer » → l'APK est téléchargé via le NAS,
-  la notification ouvre l'installateur. Le dépôt reste privé, aucun jeton dans l'app.
+- **Mises à jour en un geste** : le dashboard (≥ 4.3.18, jeton GitHub `repo` renseigné dans
+  Registres) signale une nouvelle version au chargement ; bandeau « Installer » → l'app télécharge
+  l'APK via le NAS (progression dans le bandeau) et l'installe elle-même, **sans dialogue**
+  (Android 12+ : une app qui se met à jour elle-même n'a pas besoin de confirmation). Elle se
+  ferme puis une notification « installé — touche pour rouvrir » la relance. Une seule fois :
+  Android demande d'« autoriser cette source » (puis reprend l'installation tout seul) et les
+  notifications. Le dépôt reste privé, aucun jeton dans l'app.
 - **Bouton « ⇄ » dans l'en-tête du dashboard** (dashboard ≥ 4.3.25) : l'app injecte
   `window.DockerDashboardApp` ; le site affiche alors, à côté de son nom, la liste de tes dashboards
   (bascule en un toucher), « Modifier ce dashboard » et « Ajouter ». Le menu Retour reste disponible.

@@ -38,6 +38,13 @@ class MainActivity : FragmentActivity() {
     private val locked = mutableStateOf(true)
     private var stoppedAt = 0L
 
+    /** Réponse à « autoriser les notifications ? » (mise à jour de l'app) : débloque l'installation, quel que soit le choix. */
+    @Deprecated("Deprecated in Java")
+    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode == Updates.NOTIF_REQUEST) Updates.notifPermission?.complete(Unit)
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
